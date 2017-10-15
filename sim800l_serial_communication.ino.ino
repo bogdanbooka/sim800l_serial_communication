@@ -160,6 +160,7 @@ void loop() {
           break;
       }
     }
+    //remove all SMS
   }
 
   while (Serial.available()){
