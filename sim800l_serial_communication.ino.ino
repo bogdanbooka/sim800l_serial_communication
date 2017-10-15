@@ -2,6 +2,8 @@
 #include <MillisTimer.h>
 #include <assert.h>
 
+#define MAIN_SENDER_NUMBER String("+71234567890")
+
 #define SIM800_RX_PIN 7
 #define SIM800_TX_PIN 8
 #define SIM800_RESET_PIN 13
@@ -82,6 +84,15 @@ void updateRelays(){
 
 SoftwareSerial serialSIM800(SIM800_RX_PIN, SIM800_TX_PIN);//Rx Tx
 
+void receiveSIM800Answer(){
+  delay(100);
+  while (serialSIM800.available()){
+    Serial.write(serialSIM800.read());
+    delay(100);
+  }
+  Serial.println();
+}
+
 void resetSIM800(){
   Serial.println("Reset SIM800");
   pinMode(SIM800_RESET_PIN, OUTPUT);
@@ -91,6 +102,19 @@ void resetSIM800(){
   delay(500);
   pinMode(SIM800_RESET_PIN, INPUT);
   delay(1000);
+
+//initial check
+  serialSIM800.println("AT");
+  receiveSIM800Answer();//OK
+
+//set full functionality
+  serialSIM800.println("AT+CFUN=1");
+  receiveSIM800Answer();//OK
+
+//set SMS format to ASCII
+  serialSIM800.println("AT+CMGF=1");
+  receiveSIM800Answer();//OK
+  
   Serial.println("Reset SIM800 DONE");
 }
 
@@ -111,14 +135,36 @@ void setup() {
 }
 
 void loop() {
- 
-    while (serialSIM800.available()){
-      Serial.write(serialSIM800.read());
-    }
+  updateRelays();
 
-    while (Serial.available()){
-      serialSIM800.write(Serial.read());
+  while (serialSIM800.available()){
+    Serial.write(serialSIM800.read());
+
+    //to do: do read a list of new SMS
+    //if it contains any sms from certain sender (specific number)
+    String senderNumber;
+    if (senderNumber == MAIN_SENDER_NUMBER){
+
+      //then check SMS text
+      char smsCommand;
+      switch (smsCommand) {
+    
+        //if the SMS text is '1', then switch on first relay: relays[0]->turnOnRelay();
+        case '1':
+          relays[0]->turnOnRelay();
+          break;
+    
+        //if the SMS text is '2', then switch on second relay: relays[1]->turnOnRelay();
+        case '2':
+          relays[1]->turnOnRelay();
+          break;
+      }
     }
+  }
+
+  while (Serial.available()){
+    serialSIM800.write(Serial.read());
+  }
 }
 
 void __assert(const char *__func, const char *__file, int __lineno, const char *__sexp) {
