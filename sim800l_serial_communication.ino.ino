@@ -92,6 +92,32 @@ void updateRelays(){
 
 SoftwareSerial serialSIM800(SIM800_RX_PIN, SIM800_TX_PIN);//Rx Tx
 
+class Sim800Reader{
+public:
+  static String getResponse(int readTimeout){
+    Sim800Reader reader(readTimeout);
+    
+    String result;
+    reader.m_timer.start();
+    while (reader.m_timer.isRunning()){
+      if (serialSIM800.available()) result.concat((char)serialSIM800.read());
+      reader.m_timer.run();
+    }
+    return result;
+  }
+private:
+  Sim800Reader(int readTimeout)
+  : m_timer(MillisTimer(readTimeout)){
+    assert(readTimeout > 10);
+    m_timer.expiredHandler(Sim800Reader::stopReading);
+  }
+  static void stopReading(MillisTimer& timer) {
+    timer.stop();
+  }
+private:
+  MillisTimer m_timer;
+};
+
 void waitForSim800Reply(){
   do{
     delay(30);
@@ -168,21 +194,20 @@ void turnOnRelay(RelayIndexes relayIndex){
 
 String getSenderNumber(const String& message){message;}
 
+
 //AT+CMGL="REC READ"
 #define READ_SMS_LIST_COMMAND "AT+CMGR=1,0"
 #define REMOVE_READ_SMS "AT+CMGD=1,0"
-void readListOfNewSms(){
+void tryHandleNewSms(){
   Serial.println("read List Of New Sms");
-  String lst;
 
   serialSIM800.println(READ_SMS_LIST_COMMAND);
-  waitForSim800Reply();
 
-  while (serialSIM800.available())
-    lst+=(char)serialSIM800.read();
+  String lst = Sim800Reader::getResponse(1000);
 
   lst.replace("\n","*");
   lst.replace("\r","^");
+  
   Serial.print(lst);
   Serial.println("End read List Of New Sms");
 
@@ -201,17 +226,19 @@ void readListOfNewSms(){
   //cut of "OK"
   pos = lst.indexOf(END_OF_MESSAGE);
   lst.remove(pos);
-  Serial.println(lst);
+
   String message = lst.substring(lst.lastIndexOf(NEW_NLRC)+2);
-  Serial.println(message);
+  Serial.print("SMS message: ");Serial.println(message);
 
   if (message == "1")
       turnOnRelay(Relay1);
   else if (message == "2")
       turnOnRelay(Relay2);
   //remove SMS AT+CMGD=1,3
+  Serial.println("Remove SMS");
   serialSIM800.println(REMOVE_READ_SMS);
-  receiveSIM800Answer();
+  Sim800Reader::getResponse(200);
+  Serial.println("Remove SMS DONE");
 }
 
 void onIncomingMessage(const String& atResponce){
@@ -219,7 +246,7 @@ void onIncomingMessage(const String& atResponce){
 //+CMTI: "SM",2
 //-- sim
   if (atResponce.indexOf("+CMTI: \"SM\"") > -1){
-    readListOfNewSms();
+    tryHandleNewSms();
   }
 }
 
@@ -228,25 +255,25 @@ void loop() {
 
   if (serialSIM800.available()){
     Serial.print("SIM--");
-    String lst;
-    while (serialSIM800.available())
-      lst+=(char)serialSIM800.read();
+    String lst = Sim800Reader::getResponse(500);
+
     lst.replace("\n","*");
     lst.replace("\r","^");
+
     Serial.print(lst);
     Serial.println("--SIM");
+
     onIncomingMessage(lst);
   }
 
   while (Serial.available()){
     char sr = Serial.read();
     if (sr == '~')
-      readListOfNewSms();
+      tryHandleNewSms();
     else{
       serialSIM800.write(sr);
     }
   }
-  delay(50);
 }
 
 void __assert(const char *__func, const char *__file, int __lineno, const char *__sexp) {
