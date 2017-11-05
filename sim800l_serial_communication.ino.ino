@@ -47,7 +47,7 @@ class RelayController {
         if (m_timer.isRunning())
           return; 
 
-        Serial.print("Relay ");Serial.print(m_pin);Serial.print(m_timer.ID);Serial.println(" is ON");
+        Serial.print("Relay ");Serial.print(m_pin);Serial.println(" is ON");
         digitalWrite(m_pin, RELAY_ON);
 
         m_timer.expiredHandler(RelayController::turnOffRelay);
@@ -136,30 +136,29 @@ void receiveSIM800Answer(){
 
 void resetSIM800(){
   Serial.println("Reset SIM800 --------");
-  Serial.println("Set SIM800 OFF");
+
+  Serial.println("Set SIM800 OFF");//////////////////off
   pinMode(SIM800_RESET_PIN, OUTPUT);
   digitalWrite(SIM800_RESET_PIN, HIGH);
-  delay(2000);
+  delay(1000);
   digitalWrite(SIM800_RESET_PIN, LOW);
-  delay(2000);
-  Serial.println("Set SIM800 ON");
+  delay(1000);
+
+  Serial.println("Set SIM800 ON");///////////////////on
   pinMode(SIM800_RESET_PIN, INPUT);
-  delay(3000);
+  delay(3000);//wait for loading
 
 //initial check
   serialSIM800.println("AT");
-  receiveSIM800Answer();//OK
+  Serial.println(Sim800Reader::getResponse(200));//OK
 
 //set full functionality
   serialSIM800.println("AT+CFUN=1");
-  for (int i = 0; i < 5; ++i){
-    receiveSIM800Answer();//OK
-    delay(500);
-  }
+  Serial.println(Sim800Reader::getResponse(4000));//OK
 
 //set SMS format to ASCII
   serialSIM800.println("AT+CMGF=1");
-  receiveSIM800Answer();//OK
+  Serial.println(Sim800Reader::getResponse(200));//OK
   
   Serial.println("Reset SIM800 DONE");
 }
@@ -171,18 +170,23 @@ void setup() {
   Serial.println("Starting SIM800 SMS Command Processor");
 
   serialSIM800.begin(19200);
-  while(!serialSIM800){}
+  while(!serialSIM800);
 
   resetSIM800();
 
   initRelays();
 
   Serial.println("Setup Complete!");
+
+  delay(3000);
+  tryHandleNewSms();
 }
 
 
 void turnOnRelay(RelayIndexes relayIndex){
+  
   assert(relayIndex > InvalidRelayIndex);
+  
   assert(relayIndex < RelayCount);
 
   relays[static_cast<const int>(relayIndex)]->turnOnRelay();
@@ -192,24 +196,21 @@ void turnOnRelay(RelayIndexes relayIndex){
 #define END_OF_MESSAGE "^*^*OK^*"
 #define NEW_NLRC "^*"
 
-String getSenderNumber(const String& message){message;}
-
-
-//AT+CMGL="REC READ"
+//AT+CMGL="ALL"
 #define READ_SMS_LIST_COMMAND "AT+CMGR=1,0"
 #define REMOVE_READ_SMS "AT+CMGD=1,0"
+
 void tryHandleNewSms(){
   Serial.println("read List Of New Sms");
 
   serialSIM800.println(READ_SMS_LIST_COMMAND);
-
   String lst = Sim800Reader::getResponse(1000);
 
   lst.replace("\n","*");
   lst.replace("\r","^");
   
-  Serial.print(lst);
-  Serial.println("End read List Of New Sms");
+  Serial.println(lst);
+  Serial.println("End read of new SMS");
 
   if (!lst.endsWith(END_OF_MESSAGE)){
     Serial.println("End is NOT ok");
@@ -242,9 +243,8 @@ void tryHandleNewSms(){
 }
 
 void onIncomingMessage(const String& atResponce){
-//sim --
+
 //+CMTI: "SM",2
-//-- sim
   if (atResponce.indexOf("+CMTI: \"SM\"") > -1){
     tryHandleNewSms();
   }
